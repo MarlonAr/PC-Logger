@@ -1,41 +1,42 @@
 import os
-import mysql.connector
-from datetime import datetime
-import ctypes
+import sys
+import time
+import atexit
+from firebase import firebase
 
-# Configura la conexión a la base de datos MySQL
-db_config = {
-    'host': 'localhost',
-    'user': 'root',
-    'password': 'labcom,2015',
-    'database': 'logger_register'
-}
+# Configuración de la conexión a la Realtime Database
+firebase_url = 'https://pc-logger-default-rtdb.firebaseio.com/'
+firebase_db = firebase.FirebaseApplication(firebase_url, None)
 
-# Función para registrar la fecha y hora en la base de datos
-def registrar_estado(estado):
-    connection = None  # Inicializamos la variable connection antes del bloque try
+# Función para registrar el evento en la base de datos
+def log_event(state):
+    timestamp = time.time()
+    fecha_hora = time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(timestamp))
+    data = {'estado': state, 'fecha_hora': fecha_hora}
+    firebase_db.put('/Login/', '0', data)
 
-    try:
-        connection = mysql.connector.connect(**db_config)
-        cursor = connection.cursor()
+# Función para ejecutar al apagar la aplicación
+def exit_handler():
+    log_event('apagada')
 
-        # Inserta la fecha y hora actual en la tabla 'registro'
-        cursor.execute("INSERT INTO registro (estado, fecha_hora) VALUES (%s, %s)", (estado, datetime.now()))
+# Registrar el evento al iniciar la aplicación
+log_event('encendida')
 
-        connection.commit()
-        cursor.close()
+# Registrar la función para ejecutar al apagar la aplicación
+atexit.register(exit_handler)
 
-    except mysql.connector.Error as err:
-        print(f"Error: {err}")
-
-    finally:
-        if connection and connection.is_connected():
-            connection.close()
-
-# Obtiene el estado actual del sistema
-def obtener_estado():
-    is_desktop = ctypes.windll.user32.GetForegroundWindow() != 0
-    return "Encendida" if is_desktop else "Apagada"
-
-# Registra el estado actual en la base de datos
-registrar_estado(obtener_estado())
+try:
+    while True:
+        # Puedes personalizar esta parte dependiendo del sistema operativo
+        if sys.platform.startswith('win'):
+            if os.system('shutdown /s /t 1') == 0:  # Apagar la PC
+                break
+        elif sys.platform.startswith('linux') or sys.platform.startswith('darwin'):
+            if os.system('sudo shutdown now') == 0:  # Apagar la PC
+                break
+        else:
+            print("Sistema operativo no compatible.")
+            break
+except KeyboardInterrupt:
+    # Registrar el evento al cerrar la aplicación manualmente
+    log_event('apagada_manualmente')
